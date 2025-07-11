@@ -1,2 +1,2 @@
 # homelab
-This is my home lab
+This is my homelab. Here, you will find all my personal work/projects/thoughts.
