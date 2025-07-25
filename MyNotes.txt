@@ -1,0 +1,45 @@
+ToDo
+- install local DNS
+- install local SMTP server for Zabbix
+- install local LDAP
+DONE - access to PostgreSQL DB for Zabbix (from Windows desktop)
+
+
+ArchLinux installation
+- change keyboard # loadkeys fr-latin1
+- change time/date # timedatectl set-timezone Europe/Paris
+- change root password # passwd
+- fdisk
+- encrypt system (passphrase = azertyuiop*)
+- pacman -Syu which vim man-db man-pages sudo
+- sudo apt install htop
+- sudo apt install curl
+- sudo apt install vim
+- sudo apt install cowsay
+- Turn off monitor
+- install the OpenSSH server (sudo apt install openssh-server + sudo systemctl start ssh)
+- agent Zabbix2
+- install Docker https://docs.docker.com/engine/install/ubuntu/
+
+In .profile
+export KUBECONFIG="/home/gregory/.k0s/kubeconfig"
+alias kubectl='sudo k0s kubectl'
+alias kgp='kubectl get pods'
+
+
+Rancher Desktop Setup on Windows
+If WSL already installed, reset it by launching:
+  wsl --shutdown
+  wsl --unregister Ubuntu
+Download https://rancherdesktop.io/
+Install and "set Ubuntu".
+Install k9s on WSL: https://k9scli.io/topics/install/
+=> /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+=> add bin/brew in Windows PATH
+=> brew install derailed/k9s/k9s
+
+
+Turn off monitor using command line:
+Add consoleblank=60 to GRUB_CMDLINE_LINUX_DEFAULT
+GRUB_CMDLINE_LINUX_DEFAULT="quiet consoleblank=60"
+Run "sudo grub-mkconfig -o /boot/grub/grub.cfg"
