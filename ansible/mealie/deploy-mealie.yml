@@ -1,0 +1,307 @@
+# Playbook for Mealie deployment with Apache and HTTPS
+
+- name: Mealie deployment with Apache and HTTPS
+  hosts: webservers
+  become: yes
+  vars:
+    # Configuration Mealie
+    mealie_version: "v1.12.0"  # stable
+    mealie_user: "mealie"
+    mealie_home: "/opt/mealie"
+    mealie_data: "/var/lib/mealie"
+    mealie_port: 9000
+    mealie_db_type: "postgres"
+    
+    # Web Configuration
+    domain_name: "mealie.{{ inventory_hostname }}"
+    apache_port: 443
+    apache_http_port: 80
+    ssl_cert_path: "/etc/ssl/certs"
+    ssl_key_path: "/etc/ssl/private"
+    
+    # PostgreSQL configuration
+    postgres_db: "mealie"
+    postgres_user: "mealie"
+    postgres_password: "{{ vault_postgres_password | default('mealie_secure_password') }}"
+    
+    # Env variables
+    mealie_env:
+      ALLOW_SIGNUP: "false"
+      PUID: "1000"
+      PGID: "1000"
+      TZ: "Europe/Paris"
+      MAX_WORKERS: "1"
+      WEB_CONCURRENCY: "1"
+      BASE_URL: "https://{{ domain_name }}"
+  tasks:
+    # Installation des dépendances système
+    - name: Mise à jour du cache des paquets
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Installation des paquets de base
+      apt:
+        name:
+          - apache2
+          - ssl-cert
+          - openssl
+          - git
+          - python3
+          - python3-pip
+          - python3-venv
+          - nodejs
+          - npm
+          - postgresql-client
+          - curl
+          - unzip
+          - supervisor
+          - postgresql
+          - postgresql-contrib
+          - python3-psycopg2
+        state: present
+
+    - name: Démarrage de PostgreSQL
+      systemd:
+        name: postgresql
+        state: started
+        enabled: yes
+
+    # Configuration PostgreSQL
+    - name: Création de l'utilisateur PostgreSQL
+      postgresql_user:
+        name: "{{ postgres_user }}"
+        password: "{{ postgres_password }}"
+        state: present
+      become_user: postgres
+
+    - name: Création de la base de données
+      postgresql_db:
+        name: "{{ postgres_db }}"
+        owner: "{{ postgres_user }}"
+        state: present
+      become_user: postgres  
+
+    # Création de l'utilisateur système Mealie
+    - name: Création de l'utilisateur système Mealie
+      user:
+        name: "{{ mealie_user }}"
+        system: yes
+        shell: /bin/bash
+        home: "{{ mealie_home }}"
+        create_home: yes
+
+    # Création des répertoires
+    - name: Création des répertoires Mealie
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ mealie_user }}"
+        group: "{{ mealie_user }}"
+        mode: '0755'
+      loop:
+        - "{{ mealie_home }}"
+        - "{{ mealie_data }}"
+        - "{{ mealie_data }}/logs"
+        - "{{ mealie_data }}/backups"
+
+    # Clonage du dépôt Mealie
+    - name: Clonage de Mealie depuis GitHub
+      git:
+        repo: "https://github.com/mealie-recipes/mealie.git"
+        dest: "{{ mealie_home }}/mealie"
+        version: "{{ mealie_version }}"
+        force: yes
+      become_user: "{{ mealie_user }}"
+
+    # Installation avec Docker (méthode recommandée)
+    - name: Installation de Docker
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+        state: present
+
+    - name: Démarrage de Docker
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Ajout de l'utilisateur mealie au groupe docker
+      user:
+        name: "{{ mealie_user }}"
+        groups: docker
+        append: yes
+
+    # Création du fichier docker-compose
+    - name: Création du docker-compose.yml
+      template:
+        src: docker-compose-mealie.yml.j2
+        dest: "{{ mealie_home }}/docker-compose.yml"
+        owner: "{{ mealie_user }}"
+        group: "{{ mealie_user }}"
+        mode: '0644'
+
+    # Création du fichier d'environnement
+    - name: Création du fichier .env
+      template:
+        src: mealie.env.j2
+        dest: "{{ mealie_home }}/.env"
+        owner: "{{ mealie_user }}"
+        group: "{{ mealie_user }}"
+        mode: '0600'
+
+    # Démarrage de Mealie avec Docker
+    - name: Démarrage de Mealie
+      docker_compose:
+        project_src: "{{ mealie_home }}"
+        state: present
+      become_user: "{{ mealie_user }}"
+
+    # Configuration Apache avec modules SSL
+    - name: Activation des modules Apache
+      apache2_module:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - ssl
+        - rewrite
+        - headers
+        - proxy
+        - proxy_http
+      notify: restart apache
+
+    # Génération du certificat SSL
+    - name: Génération du certificat SSL auto-signé
+      command: >
+        openssl req -x509 -nodes -days 365 -newkey rsa:2048
+        -keyout {{ ssl_key_path }}/mealie.key
+        -out {{ ssl_cert_path }}/mealie.crt
+        -subj "/C=FR/ST=Paris/L=Paris/O=Mealie/OU=IT/CN={{ domain_name }}"
+      args:
+        creates: "{{ ssl_cert_path }}/mealie.crt"
+
+    - name: Configuration des permissions SSL
+      file:
+        path: "{{ ssl_key_path }}/mealie.key"
+        mode: '0600'
+        owner: root
+        group: root
+
+    # Configuration Apache
+    - name: Configuration Apache HTTP (redirection)
+      template:
+        src: mealie-http.conf.j2
+        dest: "/etc/apache2/sites-available/mealie-http.conf"
+      notify: restart apache
+
+    - name: Configuration Apache HTTPS
+      template:
+        src: mealie-https.conf.j2  
+        dest: "/etc/apache2/sites-available/mealie-https.conf"
+      notify: restart apache
+
+    # Activation des sites
+    - name: Activation des sites Mealie
+      command: "a2ensite {{ item }}"
+      loop:
+        - mealie-http
+        - mealie-https
+      notify: restart apache
+
+    - name: Désactivation du site par défaut
+      command: a2dissite 000-default
+      ignore_errors: yes
+      notify: restart apache
+
+    # Configuration du pare-feu
+    - name: Ouverture des ports
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+      loop:
+        - "80"
+        - "443"
+      ignore_errors: yes
+
+    # Création du service systemd pour supervision
+    - name: Création du service systemd Mealie
+      template:
+        src: mealie.service.j2
+        dest: /etc/systemd/system/mealie.service
+      notify:
+        - reload systemd
+        - restart mealie
+
+    - name: Activation du service Mealie
+      systemd:
+        name: mealie
+        enabled: yes
+        daemon_reload: yes
+
+    # Script de sauvegarde
+    - name: Création du script de sauvegarde
+      template:
+        src: backup-mealie.sh.j2
+        dest: /usr/local/bin/backup-mealie.sh
+        mode: '0755'
+
+    # Programmation des sauvegardes
+    - name: Programmation des sauvegardes quotidiennes
+      cron:
+        name: "Sauvegarde Mealie"
+        minute: "0"
+        hour: "2"
+        job: "/usr/local/bin/backup-mealie.sh"
+        user: root
+
+    # Vérifications finales
+    - name: Attendre que Mealie soit prêt
+      wait_for:
+        port: "{{ mealie_port }}"
+        host: localhost
+        timeout: 60
+
+    - name: Vérification des ports Apache
+      wait_for:
+        port: "{{ item }}"
+        timeout: 30
+      loop:
+        - "{{ apache_http_port }}"
+        - "{{ apache_port }}"
+
+    # Affichage des informations finales
+    - name: Informations de déploiement
+      debug:
+        msg: |
+          ✅ Mealie déployé avec succès !
+          
+          🌐 URL d'accès: https://{{ domain_name }}
+          🔐 Port interne: {{ mealie_port }}
+          📁 Répertoire d'installation: {{ mealie_home }}
+          💾 Données: {{ mealie_data }}
+          
+          Première connexion:
+          - Créez un compte administrateur via l'interface web
+          - Les inscriptions sont désactivées par défaut
+          
+          Commandes utiles:
+          - docker-compose logs -f (dans {{ mealie_home }})
+          - systemctl status mealie
+          - /usr/local/bin/backup-mealie.sh
+
+  handlers:
+    - name: restart apache
+      systemd:
+        name: apache2
+        state: restarted
+
+    - name: reload systemd
+      systemd:
+        daemon_reload: yes
+
+    - name: restart mealie
+      systemd:
+        name: mealie
+        state: restarted

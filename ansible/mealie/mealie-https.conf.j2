@@ -1,0 +1,45 @@
+# Configuration Apache HTTPS pour Mealie
+
+<VirtualHost *:{{ apache_port }}>
+    ServerName {{ domain_name }}
+    
+    # Configuration SSL
+    SSLEngine on
+    SSLCertificateFile {{ ssl_cert_path }}/mealie.crt
+    SSLCertificateKeyFile {{ ssl_key_path }}/mealie.key
+    
+    # Protocoles SSL sécurisés
+    SSLProtocol all -SSLv2 -SSLv3 -TLSv1 -TLSv1.1
+    SSLCipherSuite ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256
+    
+    # Headers de sécurité
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    Header always set X-Content-Type-Options nosniff
+    Header always set X-Frame-Options SAMEORIGIN
+    Header always set X-XSS-Protection "1; mode=block"
+    
+    # Configuration du proxy vers Mealie
+    ProxyPreserveHost On
+    ProxyRequests Off
+    
+    # Proxy principal
+    ProxyPass / http://localhost:{{ mealie_port }}/
+    ProxyPassReverse / http://localhost:{{ mealie_port }}/
+    
+    # Headers pour le proxy
+    ProxyPassReverse / http://localhost:{{ mealie_port }}/
+    RequestHeader set X-Forwarded-Proto "https"
+    RequestHeader set X-Forwarded-Port "{{ apache_port }}"
+    
+    # Configuration pour les WebSockets (si nécessaire)
+    RewriteEngine On
+    RewriteCond %{HTTP:Upgrade} websocket [NC]
+    RewriteCond %{HTTP:Connection} upgrade [NC]  
+    RewriteRule ^/?(.*) "ws://localhost:{{ mealie_port }}/$1" [P,L]
+    
+    # Logs
+    ErrorLog ${APACHE_LOG_DIR}/mealie_https_error.log
+    CustomLog ${APACHE_LOG_DIR}/mealie_https_access.log combined
+    
+    # Configuration générée le {{ ansible_date_time.iso8601 }}
+</VirtualHost>

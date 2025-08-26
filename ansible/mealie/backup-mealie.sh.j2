@@ -1,0 +1,45 @@
+# Script de sauvegarde pour Mealie
+
+#!/bin/bash
+set -e
+
+# Configuration
+BACKUP_DIR="{{ mealie_data }}/backups"
+DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_FILE="mealie_backup_$DATE.tar.gz"
+MEALIE_HOME="{{ mealie_home }}"
+MEALIE_DATA="{{ mealie_data }}"
+MAX_BACKUPS=7
+
+echo "=== Sauvegarde Mealie - $DATE ==="
+
+# Création du répertoire de sauvegarde
+mkdir -p $BACKUP_DIR
+
+# Arrêt de Mealie pour assurer la cohérence
+echo "Arrêt temporaire de Mealie..."
+cd $MEALIE_HOME
+sudo -u {{ mealie_user }} docker-compose stop
+
+# Création de l'archive
+echo "Création de la sauvegarde..."
+tar -czf $BACKUP_DIR/$BACKUP_FILE \
+    -C {{ mealie_data }} \
+    --exclude=backups \
+    .
+
+# Redémarrage de Mealie
+echo "Redémarrage de Mealie..."
+sudo -u {{ mealie_user }} docker-compose start
+
+# Nettoyage des anciennes sauvegardes
+echo "Nettoyage des anciennes sauvegardes..."
+cd $BACKUP_DIR
+ls -t mealie_backup_*.tar.gz | tail -n +$((MAX_BACKUPS + 1)) | xargs -r rm
+
+# Informations finales
+BACKUP_SIZE=$(du -h $BACKUP_DIR/$BACKUP_FILE | cut -f1)
+echo "✅ Sauvegarde terminée: $BACKUP_FILE ($BACKUP_SIZE)"
+echo "📁 Emplacement: $BACKUP_DIR"
+echo "🗂️  Sauvegardes disponibles:"
+ls -lah $BACKUP_DIR/mealie_backup_*.tar.gz 2>/dev/null || echo "Aucune sauvegarde trouvée"

@@ -1,0 +1,53 @@
+# Script de restauration pour Mealie
+
+#!/bin/bash
+set -e
+
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 <fichier_de_sauvegarde>"
+    echo "Fichiers disponibles:"
+    ls -la {{ mealie_data }}/backups/mealie_backup_*.tar.gz 2>/dev/null || echo "Aucune sauvegarde trouvée"
+    exit 1
+fi
+
+BACKUP_FILE=$1
+MEALIE_HOME="{{ mealie_home }}"
+MEALIE_DATA="{{ mealie_data }}"
+
+echo "=== Restauration Mealie ==="
+echo "Fichier: $BACKUP_FILE"
+echo ""
+
+read -p "⚠️  Cette opération va écraser les données actuelles. Continuer? (y/N) " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "Restauration annulée."
+    exit 1
+fi
+
+# Arrêt de Mealie
+echo "Arrêt de Mealie..."
+cd $MEALIE_HOME
+sudo -u {{ mealie_user }} docker-compose stop
+
+# Sauvegarde de sécurité
+echo "Création d'une sauvegarde de sécurité..."
+SAFETY_BACKUP="safety_backup_$(date +%Y%m%d_%H%M%S).tar.gz"
+tar -czf $MEALIE_DATA/backups/$SAFETY_BACKUP -C $MEALIE_DATA --exclude=backups .
+
+# Restauration
+echo "Restauration en cours..."
+cd $MEALIE_DATA
+find . -maxdepth 1 -not -name 'backups' -not -name '.' -exec rm -rf {} +
+tar -xzf $BACKUP_FILE -C $MEALIE_DATA
+
+# Restauration des permissions
+chown -R {{ mealie_user }}:{{ mealie_user }} $MEALIE_DATA
+
+# Redémarrage
+echo "Redémarrage de Mealie..."
+cd $MEALIE_HOME
+sudo -u {{ mealie_user }} docker-compose start
+
+echo "✅ Restauration terminée!"
+echo "💾 Sauvegarde de sécurité: $SAFETY_BACKUP"

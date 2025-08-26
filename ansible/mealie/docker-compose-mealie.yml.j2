@@ -1,0 +1,43 @@
+# Configuration Docker Compose pour Mealie
+
+version: "3.8"
+services:
+  mealie:
+    image: ghcr.io/mealie-recipes/mealie:{{ mealie_version }}
+    container_name: mealie
+    ports:
+      - "{{ mealie_port }}:9000"
+    deploy:
+      resources:
+        limits:
+          memory: 1000M
+    volumes:
+      - {{ mealie_data }}:/app/data/
+    environment:
+{% for key, value in mealie_env.items() %}
+      {{ key }}: "{{ value }}"
+{% endfor %}
+{% if mealie_db_type == "postgres" %}
+      DB_ENGINE: postgres
+      POSTGRES_USER: {{ postgres_user }}
+      POSTGRES_PASSWORD: {{ postgres_password }}
+      POSTGRES_SERVER: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: {{ postgres_db }}
+{% endif %}
+    restart: unless-stopped
+{% if mealie_db_type == "postgres" %}
+    depends_on:
+      - postgres
+
+  postgres:
+    container_name: postgres
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: {{ postgres_password }}
+      POSTGRES_USER: {{ postgres_user }}
+      POSTGRES_DB: {{ postgres_db }}
+    volumes:
+      - {{ mealie_data }}/postgres:/var/lib/postgresql/data
+{% endif %}
