@@ -1,0 +1,182 @@
+# Playbook pour désinstaller complètement Mealie
+
+- name: Désinstallation complète de Mealie
+  hosts: webservers
+  become: yes
+  vars:
+    mealie_user: "mealie"
+    mealie_home: "/opt/mealie"
+    mealie_data: "/var/lib/mealie"
+    site_name: "mealie"
+    
+  tasks:
+    # Confirmation avant désinstallation
+    - name: Confirmation de la désinstallation
+      pause:
+        prompt: |
+          ⚠️  ATTENTION: Cette opération va supprimer complètement Mealie et ses données.
+          
+          Éléments qui seront supprimés:
+          - Application Mealie ({{ mealie_home }})
+          - Données et recettes ({{ mealie_data }})
+          - Configurations Apache
+          - Utilisateur système
+          - Services et crons
+          
+          Tapez 'yes' pour confirmer la désinstallation
+      register: confirmation
+      
+    - name: Vérification de la confirmation
+      fail:
+        msg: "Désinstallation annulée par l'utilisateur"
+      when: confirmation.user_input != "yes"
+
+    # Sauvegarde de sécurité avant suppression
+    - name: Création d'une sauvegarde finale
+      archive:
+        path: "{{ mealie_data }}"
+        dest: "/tmp/mealie_final_backup_{{ ansible_date_time.epoch }}.tar.gz"
+        owner: root
+        group: root
+        mode: '0600'
+      when: mealie_data is exists
+      ignore_errors: yes
+
+    # Arrêt des services
+    - name: Arrêt du service Mealie
+      systemd:
+        name: mealie
+        state: stopped
+        enabled: no
+      ignore_errors: yes
+
+    - name: Arrêt des conteneurs Docker
+      command: docker-compose down -v
+      args:
+        chdir: "{{ mealie_home }}"
+      become_user: "{{ mealie_user }}"
+      ignore_errors: yes
+
+    # Suppression des sites Apache
+    - name: Désactivation des sites Apache
+      command: "a2dissite {{ item }}"
+      loop:
+        - mealie-http
+        - mealie-https
+      ignore_errors: yes
+      notify: reload apache
+
+    - name: Suppression des configurations Apache
+      file:
+        path: "/etc/apache2/sites-available/{{ item }}"
+        state: absent
+      loop:
+        - mealie-http.conf
+        - mealie-https.conf
+      notify: reload apache
+
+    # Suppression du service systemd
+    - name: Suppression du service systemd
+      file:
+        path: /etc/systemd/system/mealie.service
+        state: absent
+      notify: reload systemd
+
+    # Suppression des tâches cron
+    - name: Suppression des tâches cron
+      cron:
+        name: "{{ item }}"
+        state: absent
+        user: root
+      loop:
+        - "Sauvegarde Mealie"
+        - "Backup Mealie"
+      ignore_errors: yes
+
+    # Suppression des scripts
+    - name: Suppression des scripts de maintenance
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /usr/local/bin/backup-mealie.sh
+        - /usr/local/bin/deploy-mealie.sh
+        - /usr/local/bin/restore-mealie.sh
+        - /opt/webhook-mealie.py
+
+    # Suppression des certificats SSL spécifiques
+    - name: Suppression des certificats SSL Mealie
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/ssl/certs/mealie.crt
+        - /etc/ssl/private/mealie.key
+
+    # Suppression des données et répertoires
+    - name: Suppression des répertoires Mealie
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ mealie_home }}"
+        - "{{ mealie_data }}"
+
+    # Suppression de l'utilisateur système
+    - name: Suppression de l'utilisateur Mealie
+      user:
+        name: "{{ mealie_user }}"
+        state: absent
+        remove: yes
+
+    # Nettoyage Docker (optionnel)
+    - name: Suppression des images Docker Mealie
+      docker_image:
+        name: "ghcr.io/mealie-recipes/mealie"
+        state: absent
+        force_absent: yes
+      ignore_errors: yes
+
+    - name: Nettoyage des volumes Docker orphelins
+      command: docker volume prune -f
+      ignore_errors: yes
+
+    # Nettoyage des paquets (optionnel et prudent)
+    - name: Liste des paquets installés spécifiquement pour Mealie
+      debug:
+        msg: |
+          Les paquets suivants ont été installés pour Mealie mais ne seront pas supprimés
+          automatiquement car ils peuvent être utilisés par d'autres applications:
+          - docker.io, docker-compose
+          - postgresql, postgresql-contrib
+          - nodejs, npm
+          - python3-pip, supervisor
+          
+          Pour les supprimer manuellement (si non utilisés ailleurs):
+          sudo apt remove docker.io docker-compose postgresql postgresql-contrib
+          sudo apt autoremove
+
+    # Informations finales
+    - name: Informations de désinstallation
+      debug:
+        msg: |
+          ✅ Désinstallation de Mealie terminée !
+          
+          📁 Sauvegarde finale créée: /tmp/mealie_final_backup_{{ ansible_date_time.epoch }}.tar.gz
+          🗑️  Répertoires supprimés: {{ mealie_home }}, {{ mealie_data }}
+          👤 Utilisateur supprimé: {{ mealie_user }}
+          🌐 Configurations Apache supprimées
+          🔧 Services et crons supprimés
+          
+          ⚠️  Note: Les paquets système (Docker, PostgreSQL, etc.) n'ont pas été supprimés
+          car ils peuvent être utilisés par d'autres applications.
+
+  handlers:
+    - name: reload apache
+      systemd:
+        name: apache2
+        state: reloaded
+
+    - name: reload systemd
+      systemd:
+        daemon_reload: yes
