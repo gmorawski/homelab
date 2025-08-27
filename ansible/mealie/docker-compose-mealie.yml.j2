@@ -10,7 +10,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1000M
+          memory: 2000M
     volumes:
       - {{ mealie_data }}:/app/data/
     environment:
@@ -41,3 +41,4 @@ services:
     volumes:
       - {{ mealie_data }}/postgres:/var/lib/postgresql/data
 {% endif %}
+
