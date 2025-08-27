@@ -198,7 +198,7 @@
 
     - name: Configuration Apache HTTPS
       template:
-        src: mealie-https.conf.j2  
+        src: mealie-https.conf.j2
         dest: "/etc/apache2/sites-available/mealie-https.conf"
       notify: restart apache
 
@@ -305,3 +305,4 @@
       systemd:
         name: mealie
         state: restarted
+
