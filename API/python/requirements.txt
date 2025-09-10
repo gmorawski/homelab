@@ -1,0 +1,24 @@
+# FastAPI dependencies for "Menu Interactif"
+# Installation: pip install -r requirements.txt
+
+# Main framework
+# fastapi==0.104.1
+
+# Server ASGI
+uvicorn[standard]==0.24.0
+
+# Security and authentication JWT
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Multipart forms
+python-multipart==0.0.6
+
+# Data modeling
+pydantic==2.5.0
+
+# Production server (option)
+gunicorn==21.2.0
+
+# System tools (option)
+psutil==5.9.6
