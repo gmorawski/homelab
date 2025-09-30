@@ -1,0 +1,4 @@
+# -- Number of replicas
+replicaCount: 2
+podLabels:
+  hello: world
