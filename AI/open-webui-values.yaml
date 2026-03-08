@@ -1,3 +1,5 @@
+#User this with helm.
+#It will create pods for open-webui and expose port 30990 on your cluster; for the UI.
 replicaCount: 1
 
 ollama:
@@ -25,3 +27,8 @@ persistence:
   accessModes:
      - ReadWriteOnce
   storageClass: local-path
+
+service:
+  type: NodePort
+  port: 8080
+  nodePort: 30990
