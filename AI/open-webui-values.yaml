@@ -1,4 +1,4 @@
-#User this with helm.
+#Use this with helm.
 #It will create pods for open-webui and expose port 30990 on your cluster; for the UI.
 replicaCount: 1
 
@@ -17,6 +17,8 @@ ollama:
     limits:
       cpu: 2500m
       memory: 3Gi
+      #When using a GPU, add the following line:
+      nvidia.com/gpu: 1
 
 pipelines:
   enabled: false
