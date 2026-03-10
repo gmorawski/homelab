@@ -10,14 +10,17 @@ ollama:
         - llama3.2:1b
       run:
         - llama3.2:1b
+    gpu:
+       enabled: true
+       type: 'nvidia'
+       number: 1
   resources:
     requests:
       cpu: 1000m
-      memory: 2Gi
+      memory: 5Gi
     limits:
       cpu: 2500m
-      memory: 3Gi
-      #When using a GPU, add the following line:
+      memory: 8Gi
       nvidia.com/gpu: 1
 
 pipelines:
