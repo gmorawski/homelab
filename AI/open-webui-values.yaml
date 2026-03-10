@@ -18,6 +18,7 @@ ollama:
     requests:
       cpu: 1000m
       memory: 5Gi
+      nvidia.com/gpu: 1
     limits:
       cpu: 2500m
       memory: 8Gi
