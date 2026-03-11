@@ -4,25 +4,22 @@ replicaCount: 1
 
 ollama:
   enabled: true
+  image:
+    repository: ollama/ollama
+    tag: "0.3.14"
   ollama:
     models:
       pull:
         - llama3.2:1b
       run:
         - llama3.2:1b
-    gpu:
-       enabled: true
-       type: 'nvidia'
-       number: 1
   resources:
     requests:
       cpu: 1000m
       memory: 5Gi
-      nvidia.com/gpu: 1
     limits:
       cpu: 2500m
       memory: 8Gi
-      nvidia.com/gpu: 1
 
 pipelines:
   enabled: false
